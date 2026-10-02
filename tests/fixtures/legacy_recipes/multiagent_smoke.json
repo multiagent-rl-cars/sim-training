@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "name": "astra-multiagent-fixture-integration-smoke",
+  "task": "Multiagent-Car-Training-v0",
+  "num_envs": 4,
+  "train_seed": 42,
+  "eval_seed": 123,
+  "total_timesteps": 256,
+  "max_training_seconds": 60,
+  "training_video_interval_s": 30,
+  "training_video_frames": 16,
+  "eval_steps": 64,
+  "video_stride": 2,
+  "checkpoint_interval": 128,
+  "torch_threads": 4,
+  "wandb": {
+    "entity": "2710-multiagent-rl",
+    "project": "sim-training",
+    "mode": "offline"
+  },
+  "known_limitations": [
+    "Software integration check, not a driving or convergence experiment",
+    "Generated uncalibrated fixture with inherited shared-agent history, ego masking and image scaling",
+    "60-second training budget excludes setup, simulator startup, evaluation and GPU billing",
+    "Budget interruption can leave an unoptimized partial rollout; inspect ppo_updates"
+  ],
+  "ppo": {
+    "n_steps": 32,
+    "batch_size": 64,
+    "n_epochs": 1,
+    "learning_rate": 0.0003
+  }
+}

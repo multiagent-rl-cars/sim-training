@@ -1,4 +1,5 @@
 from isaaclab.utils import configclass
+import numpy as np
 
 @configclass
 class LeatherbackRigidPropsCfg:
@@ -20,8 +21,8 @@ class LeatherbackArticulationPropsCfg:
 
 @configclass
 class LeatherbackInitStateCfg:
-    pos: tuple[float, float, float] = (0.0, -3.3, 0.01) # This will also dictate the spawn of the car during NORMAL reset mode. If the size of the track changes, this needs to be updated.
-    rot: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)
+    pos: tuple[float, float, float] = (0.0, 0.0, 0.01) # This will also dictate the spawn of the car during NORMAL reset mode. If the size of the track changes, this needs to be updated.
+    rot: tuple[float, float, float, float] = (-0.70710678, 0.0, 0.0, -0.70710678) # rotate 90 degrees CW about height (Z) axis
 
     pos_reset_agent: tuple[float, float, float] = (0.0, 0.0, 0.01) # This is the spawn of the car during RESET_AGENT reset mode. It can be different from the normal spawn to allow for more focused resets.
 

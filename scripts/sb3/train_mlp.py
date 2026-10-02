@@ -43,6 +43,9 @@ parser.add_argument("--debug", action="store_true", default=False, help="Enable 
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
 args_cli, hydra_args = parser.parse_known_args()
+from rc_car.observation_contract import reject_legacy_car_checkpoint
+
+reject_legacy_car_checkpoint(args_cli.task, checkpoint_requested=args_cli.checkpoint is not None)
 # always enable cameras to record video
 if args_cli.video:
     args_cli.enable_cameras = True

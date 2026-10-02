@@ -51,6 +51,10 @@ parser.add_argument("--debug", action="store_true", default=False, help="Enable 
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
 args_cli, hydra_args = parser.parse_known_args()
+from rc_car.observation_contract import reject_legacy_car_checkpoint
+
+# Includes explicit, auto-discovered, and pretrained checkpoints; fail before Kit.
+reject_legacy_car_checkpoint(args_cli.task, checkpoint_requested=True)
 
 # always enable cameras to record video
 if args_cli.video:
@@ -138,7 +142,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # create isaac environment
     log_level = logging.DEBUG if args_cli.debug else logging.INFO
-    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None, task_name=args_cli.task, console_level=log_level, file_level=log_level)
+    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None, task_name=args_cli.task, console_level=log_level, file_level=log_level, enable_cameras=args_cli.enable_cameras)
 
     # post-process agent configuration
     agent_cfg = process_sb3_cfg(agent_cfg, env.unwrapped.num_envs)

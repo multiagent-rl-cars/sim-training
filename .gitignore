@@ -8,17 +8,22 @@
 **/*.dmp
 **/.thumbs
 
-# # No USD files allowed in the repo
-**/*.usd
-**/*.usda
-**/*.usdc
-**/*.usdz
+# Authored USD assets are versioned; generated fixtures/results are ignored below.
 
 # Python
+.venv/
+**/.venv/
+/generated_assets/
+/scratch/
+.venv-isaac/
+.uv-cache/
+.python/
 .DS_Store
 **/*.egg-info/
 **/__pycache__/
 **/.pytest_cache/
+/.coverage
+/htmlcov/
 **/*.pyc
 **/*.pb
 
@@ -35,6 +40,9 @@ docker/.container.cfg
 !.vscode
 
 # Outputs
+/debug_*.png
+/overhead_camera_hidden_robot_*.png
+/action_logs/
 **/output/*
 **/outputs/*
 **/videos/*
@@ -64,11 +72,14 @@ _build
 # Teleop Recorded Dataset
 /datasets/
 
-# Tests
-tests/
+# Tests are versioned; generated test data stays ignored below.
 
 # Docker history
 .isaac-lab-docker-history
 
 # Temporary files
 source/car_training/car_training/tasks/manager_based/car_training/mdp/utils/test_data
+
+# Keep accidental legacy checkouts out of Git; optional source inspection belongs in scratch/.
+/.isaaclab/
+/.gpu-job.lock

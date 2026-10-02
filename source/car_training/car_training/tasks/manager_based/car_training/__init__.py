@@ -31,3 +31,13 @@ gym.register(
         "sb3_cfg_entry_point": f"{agents.__name__}:sb3_ppo_reset_agent_cfg.yaml",
     },
 )
+
+gym.register(
+    id="Multiagent-Car-Training-v0",
+    entry_point="car_training.tasks.manager_based.car_training.multiagent_training_env:MultiAgentEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.multiagent_training_env_cfg:MultiAgentEnvCfg",
+        "sb3_cfg_entry_point": f"{agents.__name__}:sb3_ppo_cfg.yaml",
+    },
+)

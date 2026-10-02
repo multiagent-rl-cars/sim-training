@@ -33,15 +33,12 @@ from car_training.tasks.manager_based.car_training.mdp.events import reset_robot
 import os
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).parents[6].resolve()
-leatherback_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/robot_assets/leatherback_simple_better.usd")
-ttr_nano_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/robot_assets/ttr_nano_v1.usd")
+# Override explicitly for generated fixtures or an external original asset bundle.
+ASSET_ROOT = Path(os.environ.get("CAR_TRAINING_ASSET_ROOT", Path(__file__).parent / "assets")).expanduser().resolve()
+leatherback_usd_path = str(ASSET_ROOT / "robot_assets/leatherback_simple_better.usd")
+ttr_nano_path = str(ASSET_ROOT / "robot_assets/ttr_nano_v1.usd")
+TRACK_USD_PATHS = [str(ASSET_ROOT / f"scene_assets/tracks_thickness_random/track_{i}.usd") for i in range(12)]
 
-# Track USD paths
-track_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/scene_assets/")
-TRACK_USD_PATHS = []
-for i in range(0, 12):
-    TRACK_USD_PATHS.append(track_usd_path + f"tracks_thickness_random/track_{i}.usd")
 
 
 ## 

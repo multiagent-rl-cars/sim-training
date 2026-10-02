@@ -9,8 +9,6 @@ import omni
 from pxr import UsdGeom, Gf
 import numpy as np
 
-PORJECT_ROOT = Path(__file__).resolve().parents[8]
-print(f"Project root: {PORJECT_ROOT}")
 ASSET_FOLDER = Path(__file__).resolve().parents[0] / "assets"
     
 import logging

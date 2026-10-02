@@ -1,0 +1,127 @@
+# Edit this file, then run: uv run rc-car
+schema_version: 1
+operation: check
+profile: basic-smoke
+
+job:
+  # output is optional; new runs use outputs/runs/<uuid> automatically.
+  # Set an explicit output only when a fixed investigation path is useful.
+  fixture_manifest: outputs/fixture-bundle-manifest.json
+  timeout_seconds: 2400
+  # inspect/upload require input_run: outputs/.../experiment
+
+tracking:
+  entity: 2710-multiagent-rl
+  project: sim-training
+  mode: online
+
+profiles:
+  basic-smoke:
+    task: Basic-Car-Training-v0
+    num_envs: 12
+    enable_obstacles: false
+    train_seed: 42
+    eval_seed: 123
+    total_timesteps: 384
+    max_training_seconds: 60
+    training_video_interval_s: 30
+    training_video_frames: 16
+    eval_steps: 48
+    video_stride: 2
+    checkpoint_interval: 192
+    torch_threads: 4
+    ppo:
+      n_steps: 16
+      batch_size: 64
+      n_epochs: 1
+      learning_rate: 0.0003
+      gamma: 0.99
+      gae_lambda: 0.95
+      clip_range: 0.2
+      ent_coef: 0.0
+      vf_coef: 0.5
+      max_grad_norm: 0.5
+      use_sde: false
+      sde_sample_freq: -1
+
+  multiagent-smoke:
+    task: Multiagent-Car-Training-v0
+    num_envs: 4
+    enable_obstacles: true
+    train_seed: 42
+    eval_seed: 123
+    total_timesteps: 256
+    max_training_seconds: 60
+    training_video_interval_s: 30
+    training_video_frames: 16
+    eval_steps: 64
+    video_stride: 2
+    checkpoint_interval: 128
+    torch_threads: 4
+    ppo:
+      n_steps: 32
+      batch_size: 64
+      n_epochs: 1
+      learning_rate: 0.0003
+      gamma: 0.99
+      gae_lambda: 0.95
+      clip_range: 0.2
+      ent_coef: 0.0
+      vf_coef: 0.5
+      max_grad_norm: 0.5
+      use_sde: false
+      sde_sample_freq: -1
+
+  line-following-15min:
+    task: Basic-Car-Training-v0
+    num_envs: 12
+    enable_obstacles: false
+    train_seed: 42
+    eval_seed: 123
+    total_timesteps: 10000000
+    max_training_seconds: 900
+    training_video_interval_s: 120
+    training_video_frames: 90
+    eval_steps: 450
+    video_stride: 2
+    checkpoint_interval: 12288
+    torch_threads: 4
+    ppo:
+      n_steps: 1024
+      batch_size: 256
+      n_epochs: 10
+      learning_rate: 0.0003
+      gamma: 0.99
+      gae_lambda: 0.95
+      clip_range: 0.2
+      ent_coef: 0.01
+      vf_coef: 1.0
+      max_grad_norm: 1.0
+      use_sde: true
+      sde_sample_freq: 4
+
+  multiagent-baseline:
+    task: Multiagent-Car-Training-v0
+    num_envs: 4
+    enable_obstacles: true
+    train_seed: 42
+    eval_seed: 123
+    total_timesteps: 16384
+    training_video_frames: 90
+    eval_steps: 450
+    video_stride: 2
+    checkpoint_interval: 4096
+    torch_threads: 4
+    ppo:
+      n_steps: 256
+      batch_size: 256
+      n_epochs: 4
+      learning_rate: 0.0003
+      gamma: 0.99
+      gae_lambda: 0.95
+      clip_range: 0.2
+      ent_coef: 0.01
+      vf_coef: 1.0
+      max_grad_norm: 1.0
+      use_sde: true
+      sde_sample_freq: 4

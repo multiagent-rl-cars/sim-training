@@ -10,19 +10,26 @@ from isaaclab.managers import SceneEntityCfg
 import logging
 
 import cv2
+import math
 import copy
 import torch
 import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 import numpy as np
 from isaaclab.assets import RigidObject
-from car_training.tasks.manager_based.car_training.mdp.utils.helpers import convert_coords, find_closest_point
+from car_training.tasks.manager_based.car_training.mdp.utils.helpers import find_closest_point
+from rc_car.core.geometry import (
+    convert_coordinates as convert_coords,
+    heading_to_image_vector,
+    legacy_aligned_velocity,
+    world_velocity_to_image,
+)
 from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import GpuSafeLogger
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 CROPPED_IMAGE_SIZE = 48 # Size of the cropped track neighborhood image
-OBSTACLE_CROPPED_IMAGE_SIZE = 48 # Size of the cropped obstacle image
+OBSTACLE_CROPPED_IMAGE_SIZE = 96 # Size of the cropped obstacle image
 FRONT_STEER_NAMES = ["Knuckle__Upright__Front_Right", "Knuckle__Upright__Front_Left"]
 
 
@@ -60,10 +67,9 @@ def robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor
     logger = get_logger(env)
     asset: RigidObject = env.scene[asset_cfg.name]
 
-    relative_vel = asset.data.root_com_lin_vel_w[:, :2] # Return x, y velocity
-
-    # make y velocity negative to match image coordinates
-    relative_vel[:, 1] *= -1
+    # Return an independent image-frame velocity tensor. The previous slice
+    # followed by an in-place sign flip mutated the simulator's cached state.
+    relative_vel = world_velocity_to_image(asset.data.root_com_lin_vel_w)
 
     logger.debug_lazy("Car velocities: %s", lambda: relative_vel)
     return relative_vel
@@ -105,10 +111,10 @@ def robot_heading(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Te
     logger.debug_lazy("Car heading: %s", lambda: robot_heading)
 
     # make a unit vector
-    robot_heading = torch.stack((torch.cos(robot_heading), -torch.sin(robot_heading)), dim=-1) # negative y to match image coords
+    robot_heading = heading_to_image_vector(robot_heading)
     return robot_heading
 
-def robot_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, do_convert_coords: bool = False) -> torch.Tensor:
+def robot_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, do_convert_coords: bool = False, global_frame: bool = False) -> torch.Tensor:
     """
     Get the position of the car relative to the environment or convert to image coordinates.
 
@@ -120,10 +126,15 @@ def robot_pos(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, do_convert_coor
     logger = get_logger(env)
 
     asset: RigidObject = env.scene[asset_cfg.name]
-    relative_pos = asset.data.root_link_pos_w - env.scene.env_origins  # Relative to environment origin
+    if global_frame:
+        relative_pos = asset.data.root_link_pos_w  # Global position in world coordinates
+        track_size = env.cfg.scene.ground_plane.ground_plane_params.multi_agent_track_size
+    else:
+        relative_pos = asset.data.root_link_pos_w - env.scene.env_origins  # Relative to environment origin
+        track_size = env.cfg.scene.ground_plane.ground_plane_params.each_track_size
     logger.debug_lazy("Car world positions: %s", lambda: relative_pos)
 
-    track_size = env.cfg.scene.ground_plane.ground_plane_params.each_track_size
+    
     camera_width, camera_height = env.unwrapped.get_camera_dimensions()
     logger.debug(f"Track size: {track_size}, Camera width: {camera_width}, Camera height: {camera_height}")
 
@@ -184,7 +195,7 @@ def single_obstacle_heading(env: ManagerBasedRLEnv, obstacle_cfg: SceneEntityCfg
     logger.debug_lazy("Obstacle heading: %s", lambda: obstacle_heading)
 
     # make a unit vector
-    obstacle_heading = torch.stack((torch.cos(obstacle_heading), -torch.sin(obstacle_heading)), dim=-1) # negative y to match image coords
+    obstacle_heading = heading_to_image_vector(obstacle_heading)
     return obstacle_heading
 
 def multi_obstacles_heading(env: ManagerBasedRLEnv, obstacle_cfgs: list[SceneEntityCfg]) -> torch.Tensor:
@@ -197,10 +208,18 @@ def multi_obstacles_heading(env: ManagerBasedRLEnv, obstacle_cfgs: list[SceneEnt
 
     return headings
 
-def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, hide_previous_track: bool = False) -> torch.Tensor:
+def aligned_track_neighborhood_image(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg,
+    hide_previous_track: bool = False,
+    global_frame: bool = True,
+) -> torch.Tensor:
     """
     Get the track neighborhood image rotated and aligned with the car's heading.
     The car's heading will always point towards the top of the image.
+    Shared-track callers retain global coordinates by default. Independent Basic
+    arenas explicitly pass global_frame=False to subtract each arena's origin
+    and use its local track dimensions.
 
     Returns:
         torch.Tensor: Aligned grayscale images of shape (N, 1, crop, crop).
@@ -226,7 +245,7 @@ def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEnt
     if imgs.dtype != torch.float32:
         imgs = imgs.float() / 255.0
     imgs = imgs.permute(0, 3, 1, 2)  # (N, 3, H, W)
-    car_xy = robot_pos(env, asset_cfg, do_convert_coords=True)
+    car_xy = robot_pos(env, asset_cfg, do_convert_coords=True, global_frame=global_frame)
     logger.debug_lazy("Car positions (image coords): %s", lambda: car_xy)
 
     # Normalize to [-1, 1] for grid_sample
@@ -251,7 +270,7 @@ def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEnt
     )  # (N, crop, crop, 2)
 
     # Get car headings and compute rotation angles
-    headings = asset_heading = robot_heading(env, asset_cfg)  # (N, 2)
+    headings = robot_heading(env, asset_cfg)  # (N, 2)
     angles = torch.atan2(-headings[:, 0], headings[:, 1]) + torch.pi  # (N,) Negative x to match image coords
 
     cos = torch.cos(angles).view(-1, 1, 1, 1)  # (N,1,1,1)
@@ -297,6 +316,15 @@ def aligned_track_neighborhood_image(env: ManagerBasedRLEnv, asset_cfg: SceneEnt
     #save debug image
     # debug_img = gray_crops[0, 0].cpu().numpy() * 255
     # cv2.imwrite("debug_track_neighborhood_image.png", debug_img)
+
+    # draw the robot position on the static track image
+    # static_track_image = env.unwrapped.static_track_image
+    # for i in range(N):
+    #     img = static_track_image[i].cpu().numpy()
+    #     x = int(car_xy[i, 0].item())
+    #     y = int(car_xy[i, 1].item())
+    #     cv2.circle(img, (x, y), 5, (255, 0, 0), -1)
+    #     cv2.imwrite(f"debug_static_track_image_{i}.png", img)
 
     return gray_crops # (N, 1, crop, crop)
 
@@ -397,7 +425,7 @@ def aligned_obstacle_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, mu
                             size=(CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), 
                             mode='area')
         
-
+    crops = (crops > 0.5).float() # binarize the image
     # save debug image
     # debug_img = crops[0, 0].cpu().numpy() * 255
     # cv2.imwrite("debug_aligned_obstacle_image.png", debug_img)
@@ -405,137 +433,229 @@ def aligned_obstacle_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, mu
     return crops
 
 
-
-def aligned_other_agents_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, obstacle_cfg: SceneEntityCfg) -> torch.Tensor:
+def generate_agents_map(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
     """
-    Generate aligned image of other agents in frame.
+    Generate ONE shared map containing all agents as black trapezoids.
+    GPU-friendly PyTorch version (no cv2 / no numpy).
+
+    Returns:
+        torch.Tensor: shape (1, 1, H_map, W_map), float32
+                     white background = 1.0, agents = 0.0
+    """
+    device = env.unwrapped.device
+    dtype = torch.float32
+
+    N = env.unwrapped.num_envs
+    H, W = env.unwrapped.static_track_image.shape[1:3]
+
+    agents_map = torch.ones((1, 1, H, W), device=device, dtype=dtype)
+
+    # Agent poses in global/image coordinates
+    robot_xy = robot_pos(env, asset_cfg, do_convert_coords=True, global_frame=True).to(device=device, dtype=dtype)
+    robot_headings = robot_heading(env, asset_cfg).to(device=device, dtype=dtype)
+
+    # -------------------------
+    # Trapezoid geometry
+    # -------------------------
+    heading_offset_rad = math.pi / 2.0
+
+    size_scale = 0.75
+    top_w = 5.0 * size_scale
+    bottom_w = 15.0 * size_scale
+    length = 10.0 * size_scale
+    h = length / 2.0
+
+    top_half = top_w / 2.0
+    bottom_half = bottom_w / 2.0
+
+    # A square patch large enough to contain any rotated trapezoid
+    patch_radius = int(math.ceil(math.sqrt(bottom_half**2 + h**2))) + 2
+    patch_size = 2 * patch_radius + 1
+
+    # Local integer offsets for the patch
+    offs = torch.arange(-patch_radius, patch_radius + 1, device=device, dtype=dtype)
+    dy_patch, dx_patch = torch.meshgrid(offs, offs, indexing="ij")   # shape (P, P)
+
+    # Expand to all agents: shape (N, P, P)
+    cx = robot_xy[:, 0].view(N, 1, 1)   # x = column
+    cy = robot_xy[:, 1].view(N, 1, 1)   # y = row
+
+    x_global = cx + dx_patch.unsqueeze(0)
+    y_global = cy + dy_patch.unsqueeze(0)
+
+    # Pixel indices for writing into image
+    x_idx = torch.round(x_global).long()
+    y_idx = torch.round(y_global).long()
+
+    in_bounds = (x_idx >= 0) & (x_idx < W) & (y_idx >= 0) & (y_idx < H)
+
+    # -------------------------
+    # Compute local coordinates
+    # -------------------------
+    theta = torch.atan2(robot_headings[:, 1], robot_headings[:, 0]) + heading_offset_rad
+    c = torch.cos(theta).view(N, 1, 1)
+    s = torch.sin(theta).view(N, 1, 1)
+
+    # Relative coordinates in global image frame
+    dx = x_global - cx
+    dy = y_global - cy
+
+    # Inverse rotation: global -> local trapezoid frame
+    # local y points along vehicle length
+    x_local = c * dx + s * dy
+    y_local = -s * dx + c * dy
+
+    # -------------------------
+    # Analytic trapezoid test
+    # -------------------------
+    # Width changes linearly from top to bottom as y goes from -h to +h
+    t = (y_local + h) / length
+    half_width = top_half + t * (bottom_half - top_half)
+
+    inside = (
+        (y_local >= -h) &
+        (y_local <= h) &
+        (torch.abs(x_local) <= half_width)
+    )
+
+    mask = inside & in_bounds
+
+    # -------------------------
+    # Paint all trapezoids black
+    # -------------------------
+    flat_mask = mask.reshape(-1)
+    flat_y = y_idx.reshape(-1)[flat_mask]
+    flat_x = x_idx.reshape(-1)[flat_mask]
+
+    agents_map[0, 0, flat_y, flat_x] = 0.0
+
+    # save debug image
+    # debug_img = agents_map[0, 0].cpu().numpy() * 255
+    # cv2.imwrite("debug_agents_map.png", debug_img)
+
+    return agents_map
+
+
+def aligned_other_agents_image(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
+    """
+    Generate aligned image of other agents in frame, using one shared agent map.
 
     Returns:
         torch.Tensor: (N, 1, crop, crop)
     """
-
     logger = get_logger(env)
 
     if hasattr(env.unwrapped, 'static_track_image') and env.unwrapped.static_track_image is not None:
         pass
     else:
-        # return a dummy image if static image is not available
+        # return a dummy stack of images if static image is not available
         num_envs = env.unwrapped.num_envs
-        logger.warning("static track image not found, returning dummy gray image")
-        return torch.zeros((num_envs, 1, CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), device=env.unwrapped.device, dtype=torch.float32)
+        dummy_img = torch.ones((num_envs, 1, CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE))
 
+        stack_size = 4
+        return dummy_img.repeat(1, stack_size, 1, 1)
+    
     device = env.unwrapped.device
     N = env.unwrapped.num_envs
     crop = OBSTACLE_CROPPED_IMAGE_SIZE
 
-    # Image size from static map
-    imgs = env.unwrapped.static_track_image
-    N, H, W, _ = imgs.shape
+    # base tile dimensions
+    _, H, W, _ = env.unwrapped.static_track_image.shape
 
-    # blank obstacle map in same resolution as track image
-    obstacle_map = torch.ones((N, 1, H, W), device=device)
+    # shared map with all agents
+    agents_map = generate_agents_map(env, asset_cfg)
+    map_h, map_w = agents_map.shape[-2], agents_map.shape[-1]
 
-    robot_xy = robot_pos(env, asset_cfg, do_convert_coords=True)
+    # centers for each agent in shared-map pixel coordinates
+    robot_xy = robot_pos(env, asset_cfg, do_convert_coords=True, global_frame=True)
     robot_headings = robot_heading(env, asset_cfg)
+    center_x_px = robot_xy[:, 0]
+    center_y_px = robot_xy[:, 1]
 
-    other_robot_xy = robot_pos(env, obstacle_cfg, do_convert_coords=True)
-    other_robot_headings = robot_heading(env, obstacle_cfg)
-
-    # trapezoid parameters
-    top_w = 5
-    bottom_w = 10
-    length = 10
-    h = length / 2
-
-    for i in range(N):
-
-        cx = other_robot_xy[i, 0].item()
-        cy = other_robot_xy[i, 1].item()
-
-        theta = torch.atan2(
-            other_robot_headings[i,1],
-            other_robot_headings[i,0]
-        ).item()
-
-        pts = torch.tensor([
-            [-top_w/2, -h],
-            [ top_w/2, -h],
-            [ bottom_w/2, h],
-            [-bottom_w/2, h],
-        ], device=device)
-
-        c = torch.cos(torch.tensor(theta))
-        s = torch.sin(torch.tensor(theta))
-
-        R = torch.tensor([[c,-s],[s,c]], device=device)
-
-        pts = pts @ R.T
-
-        pts[:,0] += cx
-        pts[:,1] += cy
-
-        pts = pts.long()
-
-        canvas = obstacle_map[i,0].cpu().numpy()
-        cv2.fillPoly(canvas, [pts.cpu().numpy()], 0)
-        obstacle_map[i,0] = torch.tensor(canvas, device=device)
-
-    # ----- SAME ROTATION / CROPPING AS TRACK FUNCTION -----
-
-    cx = 2.0 * robot_xy[:, 0] / (W - 1) - 1.0
-    cy = 2.0 * robot_xy[:, 1] / (H - 1) - 1.0
+    # normalize centers to [-1, 1] wrt shared map size
+    cx = 2.0 * center_x_px / (map_w - 1) - 1.0
+    cy = 2.0 * center_y_px / (map_h - 1) - 1.0
 
     lin = torch.linspace(-1, 1, crop, device=device)
     dy, dx = torch.meshgrid(lin, lin, indexing="ij")
+    dx = dx[None] * (crop / map_w)
+    dy = dy[None] * (crop / map_h)
 
-    dx = dx[None] * (crop / W)
-    dy = dy[None] * (crop / H)
+    grid = torch.stack((cx[:, None, None] + dx, cy[:, None, None] + dy), dim=-1)
 
-    grid = torch.stack(
-        (
-            cx[:, None, None] + dx,
-            cy[:, None, None] + dy,
-        ),
-        dim=-1,
-    )
+    angles = torch.atan2(-robot_headings[:, 0], robot_headings[:, 1]) + torch.pi
+    cos = torch.cos(angles).view(-1, 1, 1, 1)
+    sin = torch.sin(angles).view(-1, 1, 1, 1)
 
-    headings = robot_headings
-    angles = torch.atan2(-headings[:, 0], headings[:, 1]) + torch.pi
-
-    cos = torch.cos(angles).view(-1,1,1,1)
-    sin = torch.sin(angles).view(-1,1,1,1)
-
-    center = torch.stack((cx, cy), dim=-1).view(-1,1,1,2)
+    center = torch.stack((cx, cy), dim=-1).view(-1, 1, 1, 2)
     rel = grid - center
-
-    rel_x = rel[...,0:1]
-    rel_y = rel[...,1:2]
+    rel_x = rel[..., 0:1]
+    rel_y = rel[..., 1:2]
 
     rot_x = cos * rel_x - sin * rel_y
     rot_y = sin * rel_x + cos * rel_y
-
     grid = torch.cat((rot_x, rot_y), dim=-1) + center
 
+    # reuse one map for all N crops
+    agents_map_batched = agents_map.expand(N, -1, -1, -1)
     crops = F.grid_sample(
-        obstacle_map,
+        agents_map_batched,
         grid,
         mode="bilinear",
         padding_mode="border",
         align_corners=True,
     )
 
-    logger.debug("Obtained aligned obstacle images.")
-
     # resize the crops to the desired dimension 
-    crops = F.interpolate(crops, 
-                          size=(CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), 
-                          mode='area')
+    if CROPPED_IMAGE_SIZE != OBSTACLE_CROPPED_IMAGE_SIZE:
+        crops = F.interpolate(crops, 
+                            size=(CROPPED_IMAGE_SIZE, CROPPED_IMAGE_SIZE), 
+                            mode='area')
 
-    # save debug image
-    # debug_img = crops[0, 0].cpu().numpy() * 255
-    # cv2.imwrite("debug_aligned_obstacle_image.png", debug_img)
+    crops = (crops > 0.5).float()
 
-    return crops
+    # Here is where we initialize the stacked obstacle images
+    if not hasattr(env, "_obstacle_image_stack"):
+        stack_size = 4
+        num_envs, _, H, W = crops.shape
+        env._stack_size = stack_size
+        env._obstacle_image_stack = crops.repeat(1, stack_size, 1, 1)
+        env._obstacle_stack_initialized = torch.zeros(num_envs, dtype=torch.bool, device=device)
+
+    if not hasattr(env, "stack_step_counters"):
+        env.stack_step_counters = torch.zeros(num_envs, dtype=torch.int32, device=device)
+
+    stack = env._obstacle_image_stack
+
+    # find which envs need initialization (first time or after reset)
+    to_init = ~env._obstacle_stack_initialized
+
+    if to_init.any():
+        stack[to_init] = crops[to_init].repeat(1, env._stack_size, 1, 1)
+        env._obstacle_stack_initialized[to_init] = True
+        env.stack_step_counters[to_init] = 0
+
+    already_init = env._obstacle_stack_initialized & (~to_init)
+
+    # sample only when counter reaches frequency
+    to_update = already_init & (env.stack_step_counters >= env.stack_frequency_steps)
+
+    if to_update.any():
+        stack[to_update, 1:] = stack[to_update, :-1].clone()
+        stack[to_update, 0] = crops[to_update, 0]
+        env.stack_step_counters[to_update] = 0
+
+    # envs that were initialized but not updated this step
+    not_updated = already_init & (~to_update)
+    if not_updated.any():
+        env.stack_step_counters[not_updated] += 1
+    
+    # save all stacked images for debugging for env 0
+    # for j in range(env._stack_size):
+    #     debug_img = stack[0, j].cpu().numpy() * 255
+    #     cv2.imwrite(f"debug_other_agents_stack_env{0}_frame{j}.png", debug_img)
+    
+    return stack
 
 
 def aligned_robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, normalize: bool) -> torch.Tensor:
@@ -553,36 +673,21 @@ def aligned_robot_vel(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg, normali
     logger = get_logger(env)
     asset: RigidObject = env.scene[asset_cfg.name]
 
-    relative_vel = asset.data.root_com_lin_vel_w[:, :2]  # (N, 2)
-
     if hasattr(env.unwrapped, 'action_driver'):
         driver = env.unwrapped.action_driver
         max_throttle = driver.max_throttle
         if max_throttle != 30:
             logger.warning(f"Unexpected throttle limits for speed normalization: max_throttle={max_throttle}. Speed normalization may be incorrect.")
-    if normalize:
-        max_speed = 0.8  # 0.8 m/s corresponds to 30 rad/s for inside the action space
-        relative_vel = relative_vel / max_speed
-
-
-    heading = asset.data.heading_w  # (N,)
-
-    # Heading + pi/2 to rotate velocity into car frame
-    cos_heading = torch.cos(-heading - np.pi/2) # (N,)
-    sin_heading = torch.sin(-heading - np.pi/2) # (N,)
-
-    rot_matrix = torch.stack(
-        [
-            torch.stack([cos_heading, -sin_heading], dim=-1),
-            torch.stack([sin_heading, cos_heading], dim=-1),
-        ],
-        dim=-2,
-    )  # (N, 2, 2)
-
-    local_vel = torch.bmm(rot_matrix, relative_vel.unsqueeze(-1)).squeeze(-1)  # (N, 2)
+    local_vel = legacy_aligned_velocity(
+        asset.data.root_com_lin_vel_w,
+        asset.data.heading_w,
+        normalization_speed_mps=0.8 if normalize else None,
+    )
 
     logger.debug_lazy("Car local frame velocities: %s", lambda: local_vel)
     return local_vel
+
+
 
 def front_wheels_angle(env: ManagerBasedRLEnv) -> torch.Tensor:
     """

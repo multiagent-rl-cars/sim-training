@@ -1,136 +1,124 @@
-# Repo for Self Driving Cars
+# RC-car research and simulation
 
-## Overview
+An inspectable SB3 + Isaac research workspace on `astra-cleanup`. Keep one
+configuration, attributable experiments and visible driving evidence. **Tests
+and a higher reward curve are not proof of correct physics or useful driving.**
 
-This repository is for training ackermann self driving vehicles in IsaacLab framework. The repository is set up so that it works in isolation and avoids directly editting IsaacLab files. 
+## One workflow
 
-**Key Features:**
-
-- `Isolation` Works outside the core Isaac Lab repository, ensuring development efforts remain self-contained.
-- `Flexibility` This repo is set up to allow for the code to be run as an extension in Omniverse.
-
-
-## Installation
-
-- Install Isaac Lab by following the [installation guide](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/index.html).
-  We recommend using the conda or uv installation as it simplifies calling Python scripts from the terminal.
-
-- Clone or copy this project/repository separately from the Isaac Lab installation (i.e. outside the `IsaacLab` directory):
-
-- Using a python interpreter that has Isaac Lab installed, install the library in editable mode using:
-
-    ```bash
-    # use 'PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
-    python -m pip install -e source/car_training
-
-- Verify that the extension is correctly installed by:
-
-    - Listing the available tasks:
-
-        Note: It the task name changes, it may be necessary to update the search pattern `"Template-"`
-        (in the `scripts/list_envs.py` file) so that it can be listed.
-
-        ```bash
-        # use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
-        python scripts/list_envs.py
-        ```
-
-    - Running a task:
-
-        ```bash
-        # use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
-        python scripts/<RL_LIBRARY>/train.py --task=<TASK_NAME>
-        ```
-
-    - Running a task with dummy agents:
-
-        These include dummy agents that output zero or random agents. They are useful to ensure that the environments are configured correctly.
-
-        - Zero-action agent
-
-            ```bash
-            # use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
-            python scripts/zero_agent.py --task=<TASK_NAME>
-            ```
-        - Random-action agent
-
-            ```bash
-            # use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
-            python scripts/random_agent.py --task=<TASK_NAME>
-            ```
-
-### Set up IDE
-
-To setup the IDE, please follow these instructions:
-
-- Run VSCode Tasks, by pressing `Ctrl+Shift+P`, selecting `Tasks: Run Task` and running the `setup_python_env` in the drop down menu.
-  When running this task, you will be prompted to add the absolute path to your Isaac Sim installation.
-
-If everything executes correctly, it should create a file .python.env in the `.vscode` directory.
-The file contains the python paths to all the extensions provided by Isaac Sim and Omniverse.
-This helps in indexing all the python modules for intelligent suggestions while writing code. This is related to IsaacSim and Omniverse syntax highlighting. 
-
-- To enable syntax highlighting for IsaacLab related modules, make sure to manually add the full path to `settings.json` file. 
-
-
-### Setup as Omniverse Extension
-
-An example UI extension is provided that will load upon enabling your extension defined in `source/car_training/car_training/ui_extension_example.py`.
-
-To enable your extension, follow these steps:
-
-1. **Add the search path of this project/repository** to the extension manager:
-    - Navigate to the extension manager using `Window` -> `Extensions`.
-    - Click on the **Hamburger Icon**, then go to `Settings`.
-    - In the `Extension Search Paths`, enter the absolute path to the `source` directory of this project/repository.
-    - If not already present, in the `Extension Search Paths`, enter the path that leads to Isaac Lab's extension directory directory (`IsaacLab/source`)
-    - Click on the **Hamburger Icon**, then click `Refresh`.
-
-2. **Search and enable your extension**:
-    - Find your extension under the `Third Party` category.
-    - Toggle it to enable your extension.
-
-## Code formatting
-
-There is a pre-commit template to automatically format your code.
-To install pre-commit:
+Edit [config.yaml](config.yaml), then run the same command from this checkout:
 
 ```bash
-pip install pre-commit
+uv run rc-car
 ```
 
-Then you can run pre-commit with:
+The installed entry point is `rc-car`; it takes no arguments. `uv run` installs
+and uses the project's locked environment, including development and tracking
+dependencies by default. No separate sync or dependency flags are needed.
+`config.yaml` selects the operation, named profile, output directory, budgets and
+W&B destination. Its default `operation: check` runs Ruff, format verification,
+ty and CPU tests. It does not authenticate, allocate cloud compute or start Isaac.
+Python 3.11 and [uv](https://docs.astral.sh/uv/) are required.
 
-```bash
-pre-commit run --all-files
-```
+| `operation` | Purpose |
+| --- | --- |
+| `check` | Run the local quality suite; default and safe on the Mac |
+| `plan` | Print the merged recipe and paths without running it |
+| `tracking-check` | Check configured W&B authentication/project access; not upload proof |
+| `train` | Run bounded training and matched evaluations on an already prepared Linux RTX host |
+| `inspect` | Inspect a saved `job.input_run`; write evidence to a fresh `job.output` |
+| `upload` | Attach completed outputs to the saved W&B run; historical offline metrics must already be synced |
 
-## Troubleshooting
+Each profile contains its own training settings; the shared `tracking` section
+chooses the destination and mode. Leave `job.output` unset for an automatically
+allocated directory, or specify a fresh directory for a particular investigation.
+W&B generates its own display name; the local record retains the name, run ID
+and URL. Existing directories are never overwritten. Historical numerical JSON
+recipes live only under `tests/fixtures/legacy_recipes` for comparison.
+Limitations and interpretation belong in experiment reports, not the YAML.
+No credentials belong in YAML, source, logs or artifacts.
 
-### Pylance Missing Indexing of Extensions
+`train` is fixture-only. Follow the [operations runbook](docs/operations.md) for the
+locked runtime, approved source/assets, explicit NVIDIA EULA acceptance, host
+credentials, backup and deletion. The workflow does **not** allocate or delete
+instances. A process timeout is **not** a provider billing cap.
+On the prepared GPU host, select the simulator dependencies with
+`uv run --locked --no-group cpu --extra isaac rc-car`. Both modes use the same
+root `pyproject.toml`, `uv.lock` and `.venv`; there is no second environment file.
+CPU and Isaac options are mutually exclusive. Select Isaac on every GPU command:
+plain `uv run rc-car` selects CPU dependencies and can switch Torch back to CPU.
+Do not switch dependencies while another job uses this checkout.
+`job.timeout_seconds` bounds the training supervisor; it is not a global deadline
+for local checks, inspection or W&B operations.
 
-In some VsCode versions, the indexing of part of the extensions is missing.
-In this case, add the path to your extension in `.vscode/settings.json` under the key `"python.analysis.extraPaths"`.
+## What has actually been demonstrated?
 
-```json
-{
-    "python.analysis.extraPaths": [
-        "<path-to-ext-repo>/source/car_training"
-    ]
-}
-```
+| Evidence | Result and boundary |
+| --- | --- |
+| [E001: foundation integration](experiments/E001-foundation-integration/README.md) | Four Basic/Multi GPU gates passed on the frozen 153-file `astra-foundation-v2` source |
+| [E006: 900-second fixture baseline](experiments/E006-900s-fixture-baseline/README.md) | Matched 15-second evaluation: 66 → 0 off-track resets; combined reset-excluded travel 98.773 → 197.148 m |
+| [E003: image-input correction](experiments/E003-policy-image-encoding/README.md) | Separate 168-file v3 candidate passed 453 local tests; its four GPU gates remain pending |
 
-### Pylance Crash
+[Watch actual before/after driving](outputs/cloud-validation/20260927-run02/remote/outputs/baselines/basic-900s-01/experiment/start-vs-end.mp4).
+The baseline used generated, uncalibrated circles: no full lap, held-out
+generalization, historical convergence reproduction or real-car transfer was
+demonstrated. Its result does not validate the newer image or tracking changes.
+Later working-tree edits are not the frozen v2 or v3 snapshots.
 
-If you encounter a crash in `pylance`, it is probable that too many files are indexed and you run out of memory.
-A possible solution is to exclude some of omniverse packages that are not used in your project.
-To do so, modify `.vscode/settings.json` and comment out packages under the key `"python.analysis.extraPaths"`
-Some examples of packages that can likely be excluded are:
+The September 27 GPU session was deleted after a checksum-verified local backup
+of 240 files. See the [session receipt](outputs/cloud-validation/20260927-run02/session.json).
+Local paths under `outputs/` are ignored by Git; keep the verified backup.
 
-```json
-"<path-to-isaac-sim>/extscache/omni.anim.*"         // Animation packages
-"<path-to-isaac-sim>/extscache/omni.kit.*"          // Kit UI tools
-"<path-to-isaac-sim>/extscache/omni.graph.*"        // Graph UI tools
-"<path-to-isaac-sim>/extscache/omni.services.*"     // Services tools
-...
-```
+## Live tracking and durable results
+
+Online tracking sends metrics and selected training videos **from the training
+host directly to W&B**, so the laptop is not an upload relay. Authentication and
+project access are checked before simulator startup. The online workflow also
+uploads final checkpoints, matched evaluation data and media. Offline mode is
+an explicit choice, not a silent fallback when online authentication fails.
+
+[W&B project](https://wandb.ai/2710-multiagent-rl/sim-training) ·
+[15-minute baseline](https://wandb.ai/2710-multiagent-rl/sim-training/runs/434aa9828c404f999d1863242058f783) ·
+[Basic rehearsal](https://wandb.ai/2710-multiagent-rl/sim-training/runs/2f170b9a2a1044829ef01ac686466951) ·
+[Multi rehearsal](https://wandb.ai/2710-multiagent-rl/sim-training/runs/0261f7aa1729410ea072d7b31b3561f1).
+All three saved runs have now been uploaded and server-verified against their
+original history, final summary, media metadata and exact checkpoint/evaluation
+artifact manifests. See the [upload receipt](outputs/wandb-upload-20260927/summary.json).
+This CPU-side recovery is not a GPU test of the newer online launcher. Keep local
+backups even after upload; W&B is not the only copy.
+
+## Where to work
+
+| Path | Responsibility |
+| --- | --- |
+| `config.yaml` | The editable workflow, profiles and tracking destination |
+| `src/rc_car/` | Portable kernels/models/contracts, workflow, experiments and telemetry |
+| `source/car_training/` | Inherited Isaac adapters, packaged with `rc_car`; not CPU-importable |
+| `pyproject.toml` / `uv.lock` | One dependency definition/lock, with optional Isaac support |
+| `tests/` | CPU contracts, compatibility and failure-path tests |
+| `experiments/` | Single-hypothesis protocols/reports; [registry](experiments/README.md) |
+| `scripts/` | Reproducible setup, internal workers, supervised jobs and verified handoffs |
+| `outputs/` | Ignored raw runs, media, checkpoints and verified handoffs |
+| `scratch/` | Ignored one-off local scripts, generated review pages and debugging work; never required by a fresh clone |
+
+Read [architecture and scientific contracts](docs/architecture.md),
+[test boundaries](docs/testing-and-brev.md), the
+[portable-foundation decision](docs/decisions/0001-portable-foundation.md) and
+[tickets](docs/tickets.md). [Refactor history](docs/refactor.md) preserves the
+reasoning and review record. Dated bring-up/handoff documents are historical
+evidence, not current launch instructions or current cloud state.
+
+## Assets and framework code
+
+`generated_assets/` is procedural test input generated by the versioned fixture
+generator, not the original team's calibrated asset library. Generated files
+stay outside Git; each run preserves the exact bytes and checksums in its asset
+bundle. Generator source alone does not establish byte-for-byte determinism.
+Small authored tracks/models belong in Git (prefer text USD where practical).
+Large binary assets need a pinned artifact or LFS workflow with provenance and
+delivery checks; a Git ignore rule is not a delivery or backup mechanism.
+
+Isaac Lab comes from NVIDIA's pinned `isaaclab==2.3.0` bundle, which includes its
+runtime configuration and assets. No `.isaaclab` checkout or editable framework
+paths are required. The package consolidation is locally checked, but has not
+yet been exercised on a GPU; the older driving videos do not validate it.

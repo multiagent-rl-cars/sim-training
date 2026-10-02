@@ -39,15 +39,12 @@ from car_training.tasks.manager_based.car_training.mdp.events import reset_robot
 import os
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).parents[6].resolve()
-leatherback_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/robot_assets/leatherback_simple_better.usd")
-ttr_nano_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/robot_assets/ttr_nano_v1.usd")
+# Override explicitly for generated fixtures or an external original asset bundle.
+ASSET_ROOT = Path(os.environ.get("CAR_TRAINING_ASSET_ROOT", Path(__file__).parent / "assets")).expanduser().resolve()
+leatherback_usd_path = str(ASSET_ROOT / "robot_assets/leatherback_simple_better.usd")
+ttr_nano_path = str(ASSET_ROOT / "robot_assets/ttr_nano_v1.usd")
+TRACK_USD_PATHS = [str(ASSET_ROOT / f"scene_assets/tracks_thickness_random/track_{i}.usd") for i in range(12)]
 
-# Track USD paths
-track_usd_path = os.path.join(PROJECT_ROOT, "source/car_training/car_training/tasks/manager_based/car_training/assets/scene_assets/")
-TRACK_USD_PATHS = []
-for i in range(0, 12):
-    TRACK_USD_PATHS.append(track_usd_path + f"tracks_thickness_random/track_{i}.usd")
 
 
 ## 
@@ -243,11 +240,11 @@ class ObservationsCfg:
 
         # observation terms (order preserved)
         track_image = ObsTerm(func=aligned_track_neighborhood_image,
-                        params={"asset_cfg": SceneEntityCfg("robot"),},
-                        clip=(0.0, 255.0),)
+                        params={"asset_cfg": SceneEntityCfg("robot"), "global_frame": False},
+                        clip=(0.0, 255.0), scale=255.0,)
         obstacle_image = ObsTerm(func=aligned_obstacle_image, # needs robot and obstacle cfg to find the relative pose and then align the image accordingly
                         params={"asset_cfg": SceneEntityCfg("robot"), "multi_obstacle_cfgs": [SceneEntityCfg("obstacle_0"), SceneEntityCfg("obstacle_1"), SceneEntityCfg("obstacle_2"), SceneEntityCfg("obstacle_3")]}, 
-                        clip=(0.0, 255.0),)
+                        clip=(0.0, 255.0), scale=255.0,)
         robot_vel = ObsTerm(func=aligned_robot_vel,
                                 params={"asset_cfg": SceneEntityCfg("robot"), "normalize": True},
                                 )
@@ -301,6 +298,7 @@ class RewardsCfg:
         func=distance_from_center_reward,
         params={
             "robot_cfg": SceneEntityCfg("robot"),
+            "multi_obstacle_cfgs": [SceneEntityCfg("obstacle_0"), SceneEntityCfg("obstacle_1"), SceneEntityCfg("obstacle_2"), SceneEntityCfg("obstacle_3")],
         },
         weight=3.0,
     )
@@ -346,7 +344,7 @@ class TerminationsCfg:
 
     # Out of bounds termination
     out_of_bounds = DoneTerm(func=off_track_termination, 
-                             params={"asset_cfg": SceneEntityCfg("robot")},)
+                             params={"asset_cfg": SceneEntityCfg("robot"), "global_frame": False},)
 
     # collision_chassis = DoneTerm(func=mdp.terminations.illegal_contact,
     #                      params={

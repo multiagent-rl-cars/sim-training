@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>RC Cars — Architecture review</title>
+  <style>
+    :root { color-scheme: light dark; --bg: #f6f5f1; --paper: #fff; --ink: #222b35; --muted: #5c6670; --line: #d9dee1; --accent: #145f70; --tint: #edf5f5; }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 24px; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 18px; line-height: 1.7; }
+    .layout { max-width: 1280px; margin: auto; padding: 56px 28px 80px; display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 42px; align-items: start; }
+    aside { position: sticky; top: 30px; font-size: 14px; }
+    .eyebrow { color: var(--accent); text-transform: uppercase; font-weight: 700; font-size: 12px; letter-spacing: .12em; }
+    nav a { display: block; padding: 10px 0; text-decoration: none; color: var(--muted); border-bottom: 1px solid var(--line); line-height: 1.4; }
+    nav a:hover { color: var(--accent); }
+    main { min-width: 0; padding: 42px 48px; background: var(--paper); border: 1px solid var(--line); border-radius: 14px; }
+    header { border-bottom: 1px solid var(--line); padding-bottom: 24px; margin-bottom: 30px; }
+    h1 { font-size: clamp(32px, 4vw, 46px); line-height: 1.15; letter-spacing: -.035em; margin: 10px 0 16px; }
+    h2 { font-size: 27px; line-height: 1.3; letter-spacing: -.02em; margin: 0 0 22px; }
+    p { margin: 0 0 20px; }
+    .meta { color: var(--muted); font-size: 14px; margin-bottom: 0; }
+    .lead { font-size: 21px; }
+    section { margin-top: 46px; padding-top: 32px; border-top: 1px solid var(--line); }
+    a { color: var(--accent); text-underline-offset: 3px; overflow-wrap: anywhere; }
+    a:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+    strong { font-weight: 650; }
+    ul, ol { padding-left: 25px; margin: 0 0 24px; }
+    li { margin: 10px 0; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; background: var(--tint); padding: 2px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+    pre { font-size: 14px; line-height: 1.8; background: var(--tint); padding: 22px; border-radius: 8px; overflow-x: auto; }
+    pre code { padding: 0; font-size: inherit; }
+    .table-wrap { overflow-x: auto; margin: 26px 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 15.5px; line-height: 1.6; }
+    th, td { padding: 15px 14px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: var(--tint); font-weight: 650; }
+    td:first-child { min-width: 122px; }
+    .callout { padding: 20px 24px; border-left: 4px solid var(--accent); background: var(--tint); border-radius: 0 8px 8px 0; }
+    .callout p:last-child { margin-bottom: 0; }
+    footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+    @media (prefers-color-scheme: dark) { :root { --bg: #14191d; --paper: #1c2329; --ink: #e5ebef; --muted: #b0bac3; --line: #38444c; --accent: #8bd4df; --tint: #24343c; } }
+    @media (max-width: 980px) { .layout { display: block; max-width: 900px; padding: 24px 18px; } aside { position: static; margin-bottom: 28px; } nav { display: flex; flex-wrap: wrap; gap: 8px 20px; } nav a { padding: 7px 0; } main { padding: 30px; } }
+    @media (max-width: 550px) { body { font-size: 17px; } main { padding: 24px 18px; } .layout { padding: 18px 10px; } h2 { font-size: 24px; } th, td { padding: 10px; } table { min-width: 540px; } }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+    @media print { :root { --bg: #fff; --paper: #fff; --ink: #000; --muted: #444; --line: #ccc; --accent: #164f60; --tint: #f4f6f6; } body { font-size: 11pt; } .layout { display: block; padding: 0; max-width: none; } aside { display: none; } main { border: 0; padding: 0; } section { margin-top: 24px; padding-top: 20px; } h2 { break-after: avoid; } tr, .callout { break-inside: avoid; } .table-wrap { overflow: visible; } table { font-size: 10pt; } pre { white-space: pre-wrap; } }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside aria-label="Review navigation">
+      <p class="eyebrow">RC Cars / Research platform</p>
+      <nav aria-label="Contents">
+        <a href="#overview">Overview</a>
+        <a href="#frameworks">SB3, skrl, and RLlib</a>
+        <a href="#simulators">Isaac versus Gazebo</a>
+        <a href="#architecture">Architecture and introspection</a>
+        <a href="#directions">Research directions</a>
+        <a href="#missing">What is missing</a>
+        <a href="#tooling">Tooling and verification</a>
+      </nav>
+    </aside>
+    <main id="overview">
+      <header>
+        <p class="eyebrow">Pre-refactor decision review</p>
+        <h1>A research platform you can actually inspect</h1>
+        <p class="meta">25 September 2026 · Full review from the preceding conversation · Local, self-contained reading copy</p>
+      </header>
+      <p class="lead">I would revise the earlier plan substantially. <strong>SB3 and Isaac are defensible baselines—not decisions we should freeze for eight months.</strong> The architecture should let you understand and change the learning problem without simultaneously untangling the simulator, checkpoint format, hardware interface, and logging system.</p>
+      <p>This is the decision review before implementation. I haven’t changed code or allocated compute. When we launch, the branch will be <code>astra-cleanup</code>; Git branch names cannot contain spaces, and existing uncommitted work will be preserved.</p>
+      <p class="meta">Export note: the paragraph above describes the state when the review was written. The <code>astra-cleanup</code> branch was subsequently created to save this HTML document; the refactor has not started.</p>
+
+      <section id="frameworks">
+        <h2>SB3 versus RLlib: what actually justifies either?</h2>
+        <p>The current “multi-agent” implementation trains <strong>one shared PPO policy</strong>, with cars in a shared arena represented through vectorized environment slots. That is a legitimate baseline, but it is not an opponent league, centralized-critic system, or communication architecture. The distinction is visible in the <a href="../source/car_training/car_training/tasks/manager_based/car_training/multiagent_training_env.py" title="Line 38">environment definition</a> and <a href="../scripts/training_experiment.py" title="Line 181">PPO construction</a>.</p>
+        <p>My recommendation:</p>
+        <div class="table-wrap" tabindex="0" role="region" aria-label="Training framework comparison">
+          <table>
+            <thead><tr><th scope="col">Framework</th><th scope="col">Why I would use it here</th><th scope="col">What would justify adopting it</th></tr></thead>
+            <tbody>
+              <tr><td><strong>SB3</strong></td><td>Relatively approachable implementation; existing checkpoints and baseline; straightforward single-policy experiments.</td><td>Keep it for reproduction and initial debugging. Don’t force every future experiment through its single-agent-oriented interface.</td></tr>
+              <tr><td><strong>skrl</strong></td><td>Isaac Lab already documents multi-agent IPPO/MAPPO workflows. MAPPO adds a centralized training critic while retaining decentralized actors.</td><td>Leading candidate for cooperative driving, communication experiments, and transfer.</td></tr>
+              <tr><td><strong>RLlib</strong></td><td>Explicit agent-to-policy assignments, frozen/trainable policies, self-play examples, and distributed collection.</td><td>Prefer it if opponent populations, heterogeneous policies, or self-play become the immediate research focus.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Those distinctions are supported by the <a href="https://jmlr.csail.mit.edu/papers/volume22/20-1364/20-1364.pdf">SB3 paper</a>, <a href="https://isaac-sim.github.io/IsaacLab/v2.3.0/source/overview/reinforcement-learning/rl_existing_scripts.html">Isaac Lab training interfaces</a>, and <a href="https://docs.ray.io/en/latest/rllib/multi-agent-envs.html">RLlib’s multi-agent documentation</a>.</p>
+        <p>RLlib is not automatically the faster or more scalable choice for this simulator. Its current documentation still flags limitations around vectorizing multi-agent environments; we would need to verify how its collection model interacts with Isaac’s GPU batching. More infrastructure can also make debugging a single bad transition harder.</p>
+        <p>For your particular interest in understanding the learning machinery, <strong>TorchRL deserves consideration</strong>: its collectors, data structures, networks, and losses are exposed explicitly. The cost is taking more responsibility for assembling and validating the training loop. I would consider it if novel model/loss design becomes the research contribution—not add it as a fourth backend immediately. <a href="https://docs.pytorch.org/rl/stable/tutorials/multiagent_ppo.html">TorchRL’s multi-agent PPO tutorial</a></p>
+        <div class="callout"><p><strong>My default:</strong> preserve SB3, then conduct one small skrl IPPO/MAPPO integration experiment. Choose RLlib instead if self-play populations are the first committed direction. We should not implement four trainers during the cleanup.</p></div>
+        <p style="margin-top: 24px">Also, <strong>PPO versus SAC is a separate decision from SB3 versus RLlib</strong>. PPO is reasonable when simulated interactions are plentiful. Real-car interactions are expensive, so replay-based algorithms and demonstration-assisted initialization deserve comparison. Ordinary SAC is not automatically suitable for arbitrary offline datasets, and a PPO checkpoint cannot simply resume as SAC. <a href="https://stable-baselines3.readthedocs.io/en/master/guide/rl_tips.html">SB3 algorithm guidance</a></p>
+      </section>
+
+      <section id="simulators">
+        <h2>Isaac versus Gazebo: retain Isaac, but challenge why we need it</h2>
+        <p>Isaac’s strongest justification is batched simulation, tensor-based learning interfaces, domain randomization, and sensor simulation—not inherently more accurate cars. <a href="https://isaac-sim.github.io/IsaacLab/main/source/refs/reference_architecture/index.html">Isaac Lab architecture</a></p>
+        <p>A particularly important finding: <strong>our current policy does not consume a realistic camera pipeline each step.</strong> It uses cached track imagery transformed using simulator pose, with synthetic other-car imagery. That bypasses much of the real perception problem. See <a href="../source/car_training/car_training/tasks/manager_based/car_training/mdp/observation.py" title="Line 206">observation generation</a>.</p>
+        <p>Consequently, “NVIDIA has better graphics” is not a convincing explanation for why this task currently needs Isaac.</p>
+        <p>Gazebo becomes attractive if we adopt a ROS-centered robot system and want to exercise its nodes, messages, sensors, and control interfaces. Our existing camera/Python/serial/ESP-NOW stack does not establish that requirement. Switching would introduce integration work without evidence of better transfer. Its Mac support also has caveats; it is not an automatic local-development solution. <a href="https://gazebosim.org/docs/latest/ros2_integration/">Gazebo ROS integration</a>, <a href="https://gazebosim.org/docs/harmonic/install/">platform support</a></p>
+        <p>I recommend:</p>
+        <ul>
+          <li><strong>Retain Isaac</strong> for historical comparison and GPU experiments.</li>
+          <li><strong>Add a small, transparent planar car simulator</strong> for local closed-loop debugging: measured steering response, throttle dead zone, delay, noise, and track geometry.</li>
+          <li><strong>Consider MuJoCo later</strong> if locally inspecting articulated physics and contacts becomes important. It supports macOS, but changing engines still does not identify the physical car’s dynamics. <a href="https://mujoco.readthedocs.io/en/stable/overview.html">MuJoCo overview</a></li>
+        </ul>
+        <p>The simple simulator must advertise its limitations. Passing its tests will not establish accurate tire slip, contact behavior, or real-world transfer.</p>
+        <p>One maintenance issue: NVIDIA now marks our pinned Isaac Sim 5.1 release unsupported. Preserve that environment for reproduction, but validate a supported runtime separately. Mixing a simulator upgrade with reward and model changes would destroy our ability to explain the result. <a href="https://docs.isaacsim.omniverse.nvidia.com/5.1.0/installation/requirements.html">NVIDIA’s support notice</a></p>
+      </section>
+
+      <section id="architecture">
+        <h2>What the architecture needs to make understandable</h2>
+        <p>The biggest structural change should be a <strong>lightweight shared model/task package that imports without Isaac</strong>.</p>
+        <p>There is already evidence that this boundary is missing: the real-training repository creates fake Python module paths to load the simulator’s feature extractor. That is checkpoint coupling leaking across repositories. <a href="../../irl-training/src/rc_rl/utils/script_helpers.py" title="Line 14">Checkpoint compatibility shim</a></p>
+        <p>The shared package should own:</p>
+        <ul>
+          <li>Observation definitions: units, coordinate frames, normalization, history, masks.</li>
+          <li>Policy networks and portable inference artifacts.</li>
+          <li>Action definitions and calibrated command mapping.</li>
+          <li>Track/route geometry and task semantics.</li>
+          <li>Transition, termination, reset, and trace formats.</li>
+        </ul>
+        <p>Isaac, real hardware, training frameworks, and W&amp;B should connect through explicit interfaces. We need a few useful boundaries—not a universal plugin framework.</p>
+        <p>Multi-agent data must distinguish <strong>independent worlds from cars within a world</strong>. That means explicit world IDs, agent IDs, active masks, policy assignments, and separate agent-level versus world-level resets.</p>
+        <p>For introspection, I want one synchronized timeline:</p>
+        <pre aria-label="Introspection timeline"><code>Sensor / simulated state
+  → estimated state → exact policy observation → network outputs
+  → selected action → calibrated command → resulting transition
+                                              ↘ reward terms / termination</code></pre>
+        <p>For a failure, you should be able to answer:</p>
+        <ul>
+          <li>What did the car actually observe? What information existed only in simulator ground truth?</li>
+          <li>What were the action distribution, value estimate, and normalization statistics?</li>
+          <li>Was the requested action clipped, delayed, or changed by the control mapping?</li>
+          <li>Which reward terms contributed, with what weights and time scaling?</li>
+          <li>Was the failure perception, policy, control, physics, communication, or reset behavior?</li>
+          <li>Can the same observation be passed through another checkpoint locally?</li>
+        </ul>
+        <p>Capture detailed traces for selected episodes and failures; record lightweight summaries elsewhere. Recording every activation and frame continuously would change throughput and produce huge artifacts.</p>
+        <p>W&amp;B should compare runs and retain selected artifacts. A portable run record should remain usable without W&amp;B. Rerun is worth testing as the synchronized spatial/timeline viewer, after that recording format exists.</p>
+        <p>The model itself also needs scrutiny. The current <a href="../source/car_training/car_training/tasks/manager_based/car_training/agents/feature_extractor.py" title="Line 21">feature extractor</a> combines a residual CNN with BatchNorm, a velocity branch, and fused features. We should justify its size, normalization behavior, and temporal inputs through comparisons—not preserve them because they were inherited. Saliency plots can help exploration, but controlled input perturbations and ablations are stronger evidence of what the policy uses.</p>
+      </section>
+
+      <section id="directions">
+        <h2>How your research directions change the design</h2>
+        <div class="table-wrap" tabindex="0" role="region" aria-label="Research directions and foundations">
+          <table>
+            <thead><tr><th scope="col">Direction</th><th scope="col">Foundation we should build now</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Multi-agent transfer</strong></td><td>Identical actor observation/action contracts across sim and real; communication with explicit delay, dropout, message age, and bandwidth; collision-aware reset lifecycle.</td></tr>
+              <tr><td><strong>Real-world training</strong></td><td>Timestamped transitions, intervention logging, policy versions, replay datasets, and an actor/learner lifecycle that respects the chosen algorithm’s assumptions.</td></tr>
+              <tr><td><strong>Self-play</strong></td><td>Policy identities, matchup configuration, frozen opponents, outcome metrics, and held-out cross-play—not merely “two cars receive rewards.”</td></tr>
+              <tr><td><strong>Harder tracks</strong></td><td>Directed route graphs, intended exits, lane/rule semantics, and scenario generation. Color should be an experimental observation channel, not the only representation of direction.</td></tr>
+              <tr><td><strong>Scaling</strong></td><td>Separate cars-per-world from world count; profile perception, inference, simulation, radio delay, and stale commands independently. Twenty simulated cars do not validate twenty physical cars.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Three corrections matter here:</p>
+        <p><strong>MAPPO does not automatically provide communication.</strong> A centralized critic can see training-only state while the actors remain local. Learned communication is another model and interface decision.</p>
+        <p><strong>Self-play does not eliminate objectives.</strong> Racing still needs a definition of winning; cooperation needs measurable shared outcomes. It changes where opponents and challenges come from, not whether the task needs specification.</p>
+        <p><strong>Colored tracks currently lose their distinguishing information in the binary observation path.</strong> We should compare binary, semantic-channel, and color observations under matched scenarios rather than simultaneously changing the track, network, and reward.</p>
+      </section>
+
+      <section id="missing">
+        <h2>What I think you are missing</h2>
+        <p>The main missing work is <strong>measurement and experimental controls</strong>, more than another framework.</p>
+        <ol>
+          <li><strong>System identification before more reward tuning.</strong> Measure command-to-speed and command-to-turn response, dead zone, hysteresis, delay, asymmetry, and battery effects. The real vision code’s <code>get_velocity</code> computes displacement rather than time-normalized speed; it cannot simply be assumed equivalent to simulator velocity. <a href="../../irl-training/src/hardware/vision/Agents.py" title="Line 172">Real velocity calculation</a></li>
+          <li><strong>A classical controller baseline.</strong> Compare RL against a calibrated path follower and simple obstacle/yield logic. Otherwise we cannot tell whether RL improves coordination or merely compensates for a poor control interface.</li>
+          <li><strong>Evaluation independent of training reward.</strong> Track completion, collisions, interventions, wrong-way travel, oscillation, minimum separation, and physical interaction time. Use held-out tracks/conditions and multiple seeds. A higher return is not necessarily better driving.</li>
+          <li><strong>Reset and safety as explicit system behavior.</strong> Resetting is not an invisible administrative step. It consumes time, changes observations, can collide with other cars, and affects sample-efficiency claims. Hardware stop/watchdog behavior must not depend on the learned reward.</li>
+          <li><strong>Asset and calibration provenance.</strong> Some older original USDs have been recovered, but they still need validation. Generated fixtures are not calibrated cars. CAD attachment changes should trigger a mechanical/calibration review, not disappear into an unrelated software commit.</li>
+          <li><strong>One primary near-term experiment.</strong> All five directions can inform the interfaces, but pursuing all five equally would spread the work thin. I would start with <strong>measurably reliable two-car obstacle avoidance and transfer</strong>, while making communication and self-play possible later.</li>
+        </ol>
+        <p>The reported 15-minute convergence should remain a reproduction question, not our project’s definition of success.</p>
+      </section>
+
+      <section id="tooling">
+        <h2>Tooling and verification</h2>
+        <p>I would adopt a small, deliberate stack:</p>
+        <ul>
+          <li><strong>uv:</strong> separate locked local-development and Isaac environments.</li>
+          <li><strong>Ruff:</strong> replace overlapping formatting/import/lint tools with one configuration. <a href="https://docs.astral.sh/ruff/formatter/">Ruff documentation</a></li>
+          <li><strong>One type checker:</strong> initially Pyright as the gate, with a scoped <code>ty</code> trial on the extracted core. <code>ty</code> is worth evaluating, but its current upstream policy still identifies it as beta with potentially changing diagnostics. Don’t maintain two permanent mandatory checker configurations. <a href="https://github.com/astral-sh/ty">ty status</a></li>
+          <li><strong>pytest plus selected Hypothesis tests:</strong> numerical invariants, reset sequences, geometry, observation purity, and contract compatibility.</li>
+          <li><strong>W&amp;B:</strong> comparisons, resolved configurations, metrics, selected videos, and artifact lineage.</li>
+          <li><strong>PyTorch profiler:</strong> short targeted captures when investigating performance, not always-on tracing. <a href="https://docs.pytorch.org/tutorials/recipes/recipes/profiler_recipe.html">Profiler guide</a></li>
+        </ul>
+        <p>Typing alone will not catch meters versus pixels, wrong tensor axes, or state mutation.</p>
+        <p>The existing five tests cover tracking/configuration—not the learning problem. The new verification ladder should be:</p>
+        <div class="table-wrap" tabindex="0" role="region" aria-label="Verification ladder">
+          <table>
+            <thead><tr><th scope="col">Where</th><th scope="col">What we can establish</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Mac, ordinary tests</strong></td><td>Geometry, rewards, units, history/reset behavior, configurations, model forward passes, checkpoint loading.</td></tr>
+              <tr><td><strong>Mac, recorded data/local simulator</strong></td><td>Observation inspection, policy comparisons, closed-loop task logic, communication faults, trace/video generation.</td></tr>
+              <tr><td><strong>Short GPU integration run</strong></td><td>Actual Isaac imports, physics/rendering, batched resets, one training update, checkpoint/reload, measured throughput.</td></tr>
+              <tr><td><strong>Hardware</strong></td><td>Perception accuracy, actuation calibration, latency, safety behavior, and real driving quality.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>One concrete source-level test target: observation code takes a tensor slice and modifies it in place, potentially altering cached simulator velocity. Another: current reward telemetry samples the final rollout step rather than aggregating the entire rollout. These are exactly the sorts of problems dashboards alone cannot fix.</p>
+        <p>For runs, use bounded jobs, periodic checkpoints, a verified artifact handoff, and separate compute shutdown controls. A detached process surviving SSH disconnection is useful; it is not a billing limit. Credentials should be injected as secrets, and the W&amp;B key pasted into chat should be rotated.</p>
+        <div class="callout"><p>The launch sequence should therefore be: <strong>preserve the baseline → extract and test contracts → build one inspectable end-to-end experiment → evaluate the next training backend → expand scenarios.</strong> Keep structural changes, bug fixes, runtime upgrades, and scientific changes distinguishable.</p></div>
+        <p style="margin-top: 24px">The earlier <a href="refactor.md">refactor plan</a> needs to reflect this broader architecture. The goal is not simply cleaner folders: it is being able to explain a result, reproduce it, and change one important assumption at a time.</p>
+      </section>
+      <footer>
+        <p>Source links are preserved from the review. Local code links open repository files; their original line references are in the link titles. This page uses no external scripts, fonts, or analytics.</p>
+        <p>Background context consulted for the original review: MEMORY.md, lines 180–184 (runtime separation and reproducible evaluation) and 286–287 (historical evidence boundaries and shared-policy training).</p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

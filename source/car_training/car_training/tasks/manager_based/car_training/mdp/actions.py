@@ -10,6 +10,7 @@ from isaaclab.managers import ActionTerm
 
 from isaaclab.managers import SceneEntityCfg, ActionTermCfg
 from car_training.tasks.manager_based.car_training.mdp.utils.training_logging import GpuSafeLogger
+from rc_car.core.actions import legacy_action_targets
 
 import csv
 import os
@@ -101,7 +102,7 @@ class ThrottleSteerAckermannAction(ActionTerm):
 
         self.max_steer = MAX_STEER
 
-        if env.unwrapped.task_name == "Basic-Car-Training-v0":
+        if env.unwrapped.task_name == "Basic-Car-Training-v0" or env.unwrapped.task_name == "Multiagent-Car-Training-v0":
             self.max_throttle = MAX_THROTTLE_DRIVING_AGENT
             self.min_throttle = MIN_THROTTLE_DRIVING_AGENT
         elif env.unwrapped.task_name == "Reset-Agent":
@@ -157,20 +158,18 @@ class ThrottleSteerAckermannAction(ActionTerm):
         """
         self._raw_actions = actions
 
-        # pass action through tanh to ensure it's in [-1, 1]
-        actions = actions.tanh()
-
-        # Map throttle from [-1, 1] → [0, 1]
-        throttle_norm = 0.5 * (actions[:, 0] + 1.0)
-        throttle = self.min_throttle + throttle_norm * (self.max_throttle - self.min_throttle)
+        self._processed_actions = legacy_action_targets(
+            actions,
+            min_wheel_speed_rad_s=self.min_throttle,
+            max_wheel_speed_rad_s=self.max_throttle,
+            max_steering_rad=self.max_steer,
+        )
+        throttle = self._processed_actions[:, 0]
         self.logger.debug_lazy("Processed throttle commands: %s", lambda: throttle)
 
-        steer = self.max_steer * actions[:, 1]
+        steer = self._processed_actions[:, 1]
         self.logger.debug_lazy("Processed steer commands: %s", lambda: steer)
         
-        # store as (num_envs, 2) again, but now processed
-        self._processed_actions = torch.stack([throttle, steer], dim=-1)
-
         # self.record_actions_to_file(throttle, steer)
 
         self.action_buffer = torch.roll(self.action_buffer, shifts=-1, dims=1)

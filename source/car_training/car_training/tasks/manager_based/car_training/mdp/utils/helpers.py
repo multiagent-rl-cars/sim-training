@@ -63,6 +63,54 @@ def find_track_points_from_image(image: np.ndarray, debug = False, image_idx: in
 
     return track_points
 
+def find_all_tracks(image: np.ndarray, debug = False, image_idx: int = 0):
+    """
+    Process the image to find track points for all tracks (not just the largest one).
+
+    :param image: Input image from the car's camera.
+    :type image: np.ndarray
+    :param debug: If True, will save some debug images. The images will be save in test_data folder.
+    :type debug: bool
+    :return: List of track points as (x, y) tuples.
+    :rtype: list[tuple[float, float]]
+    """
+    # Convert to grayscale
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+    loewr_black = np.array([0, 0, 0])
+    upper_black = np.array([180, 255, 80])
+
+    # Create a binary mask where black pixels are white and the rest are black
+    binary = cv2.inRange(hsv, loewr_black, upper_black)
+
+    if debug:
+        cv2.imwrite(f"{TEST_DATA_PATH}/debug_binary_{image_idx}.png", binary)
+    # Find contours
+    contours, _ = cv2.findContours(
+        binary,
+        cv2.RETR_LIST,   # all contours
+        cv2.CHAIN_APPROX_NONE  # keep all contour points
+    )
+
+    all_track_points = []
+    for contour in contours:
+        track_points = contour.squeeze()  # shape (N, 2)
+        all_track_points.append(track_points)
+
+        logger.debug(f"Number of track points detected in a track: {len(track_points)}")
+
+    # combine all track points into a single list
+    all_track_points = np.concatenate(all_track_points, axis=0)
+
+    # Debugging: Save images if debug is True
+    if debug:
+        debug_contour_image = image.copy()
+        for point in all_track_points:
+            cv2.circle(debug_contour_image, (int(point[0]), int(point[1])), 2, (0, 255, 0), -1)
+        cv2.imwrite(f"{TEST_DATA_PATH}/debug_all_track_points_{image_idx}.png", debug_contour_image)
+
+    return all_track_points
+
 def find_yellow_walls_from_image(image: np.ndarray, debug = False, image_idx: int = 0):
     """
     Process the image to find yellow wall points.

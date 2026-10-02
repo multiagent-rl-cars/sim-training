@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "name": "astra-basic-fixture-integration-smoke",
+  "task": "Basic-Car-Training-v0",
+  "num_envs": 12,
+  "enable_obstacles": false,
+  "train_seed": 42,
+  "eval_seed": 123,
+  "total_timesteps": 384,
+  "max_training_seconds": 60,
+  "training_video_interval_s": 30,
+  "training_video_frames": 16,
+  "eval_steps": 48,
+  "video_stride": 2,
+  "checkpoint_interval": 192,
+  "torch_threads": 4,
+  "wandb": {
+    "entity": "2710-multiagent-rl",
+    "project": "sim-training",
+    "mode": "offline"
+  },
+  "known_limitations": [
+    "Software integration check, not a driving or convergence experiment",
+    "Twelve uncalibrated repeated fixture tracks, not the original track library",
+    "Basic obstacle-disabled path only; run the simulator smoke check separately with obstacles enabled",
+    "60-second training budget excludes setup, simulator startup, evaluation and GPU billing",
+    "Budget interruption can leave an unoptimized partial rollout; inspect ppo_updates"
+  ],
+  "ppo": {
+    "n_steps": 16,
+    "batch_size": 64,
+    "n_epochs": 1,
+    "learning_rate": 0.0003
+  }
+}

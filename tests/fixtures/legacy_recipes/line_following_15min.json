@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "name": "line-following-15min-fixture-attempt",
+  "task": "Basic-Car-Training-v0",
+  "num_envs": 12,
+  "enable_obstacles": false,
+  "train_seed": 42,
+  "eval_seed": 123,
+  "total_timesteps": 10000000,
+  "max_training_seconds": 900,
+  "training_video_interval_s": 120,
+  "training_video_frames": 90,
+  "eval_steps": 450,
+  "video_stride": 2,
+  "checkpoint_interval": 12288,
+  "torch_threads": 4,
+  "wandb": {"entity": "2710-multiagent-rl", "project": "sim-training"},
+  "known_limitations": [
+    "Generated uncalibrated car and repeated circular track, not original 12-track library",
+    "NVIDIA L4 instead of reported RTX 5070",
+    "Fixture control period 1/30 s instead of reported 0.1 s",
+    "Current Basic task and default SB3 CombinedExtractor; historical final code/config not verified",
+    "900 s includes training video capture and telemetry, excludes simulator startup and evaluation",
+    "Stops at next environment step after budget; partial final rollout is not optimized",
+    "Reward increase alone is not evidence of convergence"
+  ],
+  "ppo": {
+    "n_steps": 1024, "batch_size": 256, "n_epochs": 10,
+    "learning_rate": 0.0003, "gamma": 0.99, "gae_lambda": 0.95,
+    "clip_range": 0.2, "ent_coef": 0.01, "vf_coef": 1.0,
+    "max_grad_norm": 1.0, "use_sde": true, "sde_sample_freq": 4
+  }
+}

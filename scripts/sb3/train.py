@@ -44,6 +44,9 @@ parser.add_argument(
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
 args_cli, hydra_args = parser.parse_known_args()
+from rc_car.observation_contract import reject_legacy_car_checkpoint
+
+reject_legacy_car_checkpoint(args_cli.task, checkpoint_requested=args_cli.checkpoint is not None)
 # always enable cameras to record video
 if args_cli.video:
     args_cli.enable_cameras = True
@@ -158,7 +161,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     env_cfg.log_dir = log_dir
 
     # create isaac environment
-    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None, task_name=args_cli.task)
 
     # convert to single-agent instance if required by the RL algorithm
     if isinstance(env.unwrapped, DirectMARLEnv):

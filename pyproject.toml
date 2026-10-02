@@ -1,0 +1,114 @@
+[project]
+name = "rc-car-research"
+version = "0.1.0"
+description = "Inspectable, simulator-independent RC-car research components"
+requires-python = ">=3.11,<3.12"
+dependencies = ["numpy>=1.26,<3", "pydantic>=2.10,<3", "PyYAML>=6.0.2,<7"]
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rc_car", "source/car_training/car_training"]
+
+[project.optional-dependencies]
+isaac = [
+    "isaacsim[all,extscache]==5.1.0; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "isaaclab[sb3]==2.3.0; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "torch==2.7.0; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "torchvision==0.22.0; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "torchaudio==2.7.0; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "opencv-python==4.11.0.86; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "stable-baselines3==2.7.0; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "psutil; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "setuptools<81; sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+
+[project.scripts]
+rc-car = "rc_car.workflow:main"
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4,<5",
+    "ruff>=0.11,<1",
+    "ty>=0.0.1,<0.1",
+    "pytest>=8,<10",
+    "hypothesis>=6,<7",
+]
+cpu = ["torch==2.7.0", "stable-baselines3==2.7.0"]
+assets = ["usd-core==25.5.1"]
+tracking = [
+    "wandb==0.25.1",
+]
+
+[tool.uv]
+# One project/lock/environment. CPU is the safe default; Isaac is explicit.
+default-groups = ["dev", "cpu", "tracking"]
+conflicts = [[{ group = "cpu" }, { extra = "isaac" }]]
+build-constraint-dependencies = ["setuptools<81"]
+# NVIDIA's index metadata differs from its 5.1 Linux wheel. These match the
+# installed wheel's Requires-Dist (previously validated with uv pip check).
+override-dependencies = ["filelock==3.13.1", "fsspec==2024.6.1", "networkx==3.3"]
+environments = [
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+
+[tool.uv.sources]
+# Local/CI checks must not download CUDA. The simulator bundle includes its
+# config/apps/assets, so no editable framework checkout or local paths are needed.
+torch = [
+    { index = "pytorch-cpu", group = "cpu", marker = "sys_platform == 'linux'" },
+    { index = "pytorch-cu128", extra = "isaac", marker = "sys_platform == 'linux'" },
+]
+torchvision = { index = "pytorch-cu128", extra = "isaac", marker = "sys_platform == 'linux'" }
+torchaudio = { index = "pytorch-cu128", extra = "isaac", marker = "sys_platform == 'linux'" }
+isaaclab = { index = "pypi", extra = "isaac" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[[tool.uv.index]]
+name = "nvidia"
+url = "https://pypi.nvidia.com"
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+include = ["src/**/*.py", "tests/**/*.py", "scripts/bundle.py", "scripts/check_online_tracking.py", "scripts/inspect_results.py", "scripts/prepare_session.py", "scripts/sync_wandb_backup.py", "scripts/experiment_tracking.py", "scripts/check.py", "scripts/capture_provenance.py"]
+extend-exclude = ["tests/models/fixtures"]
+force-exclude = true
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B"]
+
+[tool.ty.environment]
+python-version = "3.11"
+
+[tool.ty.src]
+include = ["src", "tests", "scripts/bundle.py", "scripts/check_online_tracking.py", "scripts/inspect_results.py", "scripts/prepare_session.py", "scripts/sync_wandb_backup.py"]
+exclude = ["tests/models/fixtures"]
+
+[tool.ty.terminal]
+error-on-warning = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-config --strict-markers"
+markers = [
+    "gpu: requires the separately installed Linux RTX Isaac runtime",
+    "network: explicitly authorized external service integration",
+]

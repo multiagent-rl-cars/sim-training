@@ -6,8 +6,6 @@ import torch
 from torch.nn.utils.rnn import pad_sequence
 from pathlib import Path
 
-PORJECT_ROOT = Path(__file__).resolve().parents[8]
-print(f"Project root: {PORJECT_ROOT}")
 ASSET_FOLDER = Path(__file__).resolve().parents[0] / "assets"
     
 import logging
@@ -33,7 +31,7 @@ class CarTrainingEnv(ManagerBasedRLEnv):
         self.logger: GpuSafeLogger = GpuSafeLogger(logger)
 
         self.enable_cameras = enable_cameras
-        if self.enable_cameras:
+        if self.enable_cameras and getattr(cfg.scene, "overhead_camera", None) is None:
             cfg.scene.overhead_camera = OverheadCameraCfg()
 
         self.enable_obstacles = enable_obstacles
@@ -86,7 +84,10 @@ class CarTrainingEnv(ManagerBasedRLEnv):
         self.obstacle_map = torch.ones((N, 1, H, W), device=device)
         generate_obstacles_map(self, env_ids=env_ids, multi_obstacle_cfgs=[SceneEntityCfg("obstacle_0"), SceneEntityCfg("obstacle_1"), SceneEntityCfg("obstacle_2"), SceneEntityCfg("obstacle_3")],)
         
-        return obs, info
+        # Track and obstacle maps are initialized after the base reset; return
+        # observations from the completed reset, not its placeholder images.
+        self.obs_buf = self.observation_manager.compute()
+        return self.obs_buf, info
 
 
     def __init_static_track_image_if_needed(self) -> None:
